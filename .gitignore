@@ -1,0 +1,18 @@
+﻿# Backend
+careeros-backend/target/
+careeros-backend/uploads/
+careeros-backend/*.log
+careeros-backend/.env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/*.log
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
