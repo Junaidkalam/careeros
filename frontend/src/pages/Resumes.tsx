@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listResumes, uploadResume, ResumeResponse } from '../lib/resumes';
+import { listResumes, uploadResume, deleteResume, ResumeResponse } from '../lib/resumes';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
-import { AlertCircle, FileText, Upload, AlertTriangle } from 'lucide-react';
+import { AlertCircle, FileText, Upload, AlertTriangle, FileUp, Briefcase, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -63,14 +63,27 @@ export default function Resumes() {
       setUploadError(err.detail || err.error || err.message || 'Upload failed');
     } finally {
         setIsUploading(false);
-        fetchList();
-      }
+    }
+  };
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Are you sure you want to delete this resume? This will detach it from any connected applications.')) return;
+    try {
+      await deleteResume(id);
+      fetchList();
+    } catch (err: any) {
+      setListError(err.detail || err.error || err.message || 'Failed to delete resume');
+    }
   };
 
   return (
-    <div className="max-w-[900px]">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-display text-foreground font-normal">Resumes</h1>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Resumes</h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage your resumes and AI-parsed profiles.</p>
+        </div>
         
         <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
           <DialogTrigger asChild>
@@ -85,23 +98,43 @@ export default function Resumes() {
                 Upload your resume (.pdf or .docx). The AI will parse your profile automatically.
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleUpload} className="space-y-4 py-4">
+            <form onSubmit={handleUpload} className="space-y-5 py-4">
               {uploadError && (
-                <div className="text-[13px] text-destructive py-2 px-3 rounded-sm bg-destructive/10 border border-destructive/20">
+                <div className="text-sm text-destructive py-2 px-3 rounded-md bg-destructive/10 border border-destructive/20 flex gap-2 items-center">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
                   {uploadError}
                 </div>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="resume-file">Resume File</Label>
-                <Input
-                  id="resume-file"
-                  type="file"
-                  accept=".pdf,.docx"
-                  required
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  className="cursor-pointer file:text-primary file:font-medium file:bg-primary/10 file:border-0 file:mr-4 file:px-3 file:py-1 file:rounded-sm hover:file:bg-primary/20"
-                />
+              
+              <div className="space-y-3">
+                <Label htmlFor="resume-file">Resume File *</Label>
+                <div className="flex items-center justify-center w-full">
+                  <label htmlFor="resume-file" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer bg-secondary/20 hover:bg-secondary/50 transition-colors">
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <FileUp className="w-8 h-8 mb-3 text-muted-foreground" />
+                      <p className="mb-1 text-sm text-muted-foreground">
+                        <span className="font-semibold text-foreground">Click to upload</span> or drag and drop
+                      </p>
+                      <p className="text-xs text-muted-foreground">PDF or DOCX</p>
+                    </div>
+                    <Input
+                      id="resume-file"
+                      type="file"
+                      accept=".pdf,.docx"
+                      required
+                      className="hidden"
+                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                </div>
+                {file && (
+                  <div className="text-sm text-primary font-medium flex items-center gap-2 bg-primary/5 p-2 rounded-md border border-primary/10">
+                    <FileText className="w-4 h-4" />
+                    <span className="truncate">{file.name}</span>
+                  </div>
+                )}
               </div>
+              
               <div className="space-y-2">
                 <Label htmlFor="version-label">Version Label (Optional)</Label>
                 <Input
@@ -111,7 +144,7 @@ export default function Resumes() {
                   onChange={(e) => setVersionLabel(e.target.value)}
                 />
               </div>
-              <DialogFooter className="pt-4">
+              <DialogFooter className="pt-2">
                 <Button type="button" variant="outline" onClick={() => setIsUploadOpen(false)} disabled={isUploading}>
                   Cancel
                 </Button>
@@ -125,78 +158,115 @@ export default function Resumes() {
       </div>
 
       {listError && (
-        <div className="mb-4 text-[13px] text-destructive py-2 px-3 rounded-sm bg-destructive/10 border border-destructive/20 flex items-center gap-2">
+        <div className="mb-4 text-sm text-destructive py-3 px-4 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           {listError}
         </div>
       )}
+      
       {isLoading ? (
-        <div className="flex items-center justify-center py-20 text-muted-foreground">Loading...</div>
+        <div className="flex items-center justify-center py-32">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-muted-foreground font-medium">Loading resumes...</span>
+          </div>
+        </div>
       ) : listError ? null : resumes.length === 0 ? (
-        <div className="text-center py-20 bg-card rounded-md border border-dashed border-border text-muted-foreground">
-          No resumes uploaded yet. Upload one to get started.
+        <div className="flex flex-col items-center justify-center py-24 px-4 text-center bg-card/50 border border-dashed rounded-xl">
+          <div className="w-12 h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center mb-4">
+            <FileText className="w-6 h-6" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-1">No resumes uploaded yet</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mb-6">
+            Upload your resume to let our AI automatically extract your skills, experience, and parse your profile.
+          </p>
+          <Button onClick={() => setIsUploadOpen(true)} className="gap-2">
+            <Upload className="w-4 h-4" /> Upload Resume
+          </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {resumes.map(r => (
             <Card 
               key={r.id} 
-              className="p-5 flex flex-col cursor-pointer hover:border-primary/50 transition-colors"
+              className="flex flex-col cursor-pointer glass-panel border border-border/40 hover:border-primary/40 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden group relative"
               onClick={() => navigate(`/resumes/${r.id}`)}
             >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2 text-foreground font-medium truncate">
-                  <FileText className="w-4 h-4 text-primary shrink-0" />
-                  <span className="truncate">{r.filename}</span>
-                </div>
-                {r.versionLabel && (
-                  <Badge variant="secondary" className="font-normal text-[11px] shrink-0">
-                    {r.versionLabel}
-                  </Badge>
-                )}
-              </div>
-              <div className="text-[12px] text-muted-foreground mb-4">
-                Uploaded {new Date(r.createdAt).toLocaleDateString()}
-              </div>
-
-              {!r.profileGenerated ? (
-                <div className="mt-auto bg-destructive/10 border border-destructive/20 text-destructive text-[12px] p-3 rounded-sm flex gap-2 items-start">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="block font-medium">AI Parsing Failed</strong>
-                    {r.warning || 'Could not extract text from this document.'}
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => handleDelete(r.id, e)}
+                className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive h-8 w-8 z-10 rounded-md backdrop-blur-md bg-background/50 border border-border/50"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+              
+              <div className="p-6 flex-1 flex flex-col">
+                <div className="flex items-start gap-4 mb-4 pr-8">
+                  <div className="w-10 h-10 bg-gradient-to-br from-primary/10 to-primary/5 text-primary rounded-xl shrink-0 flex items-center justify-center border border-primary/20 shadow-sm group-hover:scale-110 transition-transform">
+                    <FileText className="w-5 h-5" />
                   </div>
-                </div>
-              ) : r.candidateProfile ? (
-                <div className="mt-auto space-y-3 pt-3 border-t border-border">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    {r.candidateProfile.primaryRole && (
-                      <div className="text-[13px] font-medium text-foreground">
-                        {r.candidateProfile.primaryRole}
-                      </div>
-                    )}
-                    {r.candidateProfile.experienceYears != null && (
-                      <div className="text-[12px] text-muted-foreground">
-                        {r.candidateProfile.experienceYears} yrs exp
-                      </div>
-                    )}
-                  </div>
-                  {r.candidateProfile.skills && r.candidateProfile.skills.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {r.candidateProfile.skills.slice(0, 4).map((s, i) => (
-                        <Badge key={i} variant="outline" className="text-[11px] font-normal px-1.5 py-0">
-                          {s.skillName}
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <h3 className="text-[15px] font-semibold text-foreground truncate group-hover:text-primary transition-colors" title={r.filename}>
+                      {r.filename}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      {r.versionLabel && (
+                        <Badge variant="secondary" className="font-bold text-[9px] uppercase tracking-wider bg-primary/10 text-primary border-0 rounded-sm px-1.5">
+                          {r.versionLabel}
                         </Badge>
-                      ))}
-                      {r.candidateProfile.skills.length > 4 && (
-                        <span className="text-[11px] text-muted-foreground pl-1">
-                          +{r.candidateProfile.skills.length - 4} more
-                        </span>
+                      )}
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-muted-foreground/60 stat-number uppercase">
+                        {new Date(r.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {!r.profileGenerated ? (
+                  <div className="mt-auto bg-destructive/5 border border-destructive/20 text-destructive text-xs p-3.5 rounded-xl flex gap-3 items-start">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block font-semibold mb-1">AI Parsing Failed</strong>
+                      <span className="opacity-90 leading-snug block">{r.warning || 'Could not extract text from this document.'}</span>
+                    </div>
+                  </div>
+                ) : r.candidateProfile ? (
+                  <div className="mt-auto space-y-4 pt-5 border-t border-border/40">
+                    <div className="flex items-center justify-between gap-3 bg-secondary/20 p-2.5 rounded-lg border border-border/40">
+                      {r.candidateProfile.primaryRole ? (
+                        <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground truncate">
+                          <Briefcase className="w-4 h-4 text-primary/70 shrink-0" />
+                          <span className="truncate">{r.candidateProfile.primaryRole}</span>
+                        </div>
+                      ) : (
+                        <div className="text-[12px] text-muted-foreground italic">No role detected</div>
+                      )}
+                      {r.candidateProfile.experienceYears != null && (
+                        <Badge variant="outline" className="text-[11px] font-bold tracking-widest uppercase bg-background/80 border-border/80 shrink-0">
+                          {r.candidateProfile.experienceYears}y exp
+                        </Badge>
                       )}
                     </div>
-                  )}
-                </div>
-              ) : null}
+                    {r.candidateProfile.skills && r.candidateProfile.skills.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {r.candidateProfile.skills.slice(0, 5).map((s, i) => (
+                          <Badge key={i} variant="secondary" className="text-[10px] bg-secondary/60 text-secondary-foreground hover:bg-secondary/80 font-medium px-2 py-0.5 rounded-md border border-border/50 transition-colors">
+                            {s.skillName}
+                          </Badge>
+                        ))}
+                        {r.candidateProfile.skills.length > 5 && (
+                          <span className="text-[10px] font-bold text-muted-foreground bg-secondary/30 px-2 py-0.5 rounded-md border border-border/30 flex items-center">
+                            +{r.candidateProfile.skills.length - 5}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
             </Card>
           ))}
         </div>

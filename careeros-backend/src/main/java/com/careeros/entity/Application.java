@@ -44,4 +44,6 @@ public class Application extends BaseEntity {
 
     @Column(length = 2000)
     private String notes;
+
+    private LocalDate followUpDate;
 }

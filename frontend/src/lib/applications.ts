@@ -29,6 +29,7 @@ export interface ApplicationResponse {
   matchScore: number | null;
   matchResult: MatchResult | null;
   notes: string | null;
+  followUpDate: string | null;
   createdAt: string;
 }
 
@@ -54,6 +55,10 @@ export async function listApplications(): Promise<ApplicationResponse[]> {
   return fetchApi<ApplicationResponse[]>('/applications');
 }
 
+export async function getApplication(id: string): Promise<ApplicationResponse> {
+  return fetchApi<ApplicationResponse>(`/applications/${id}`);
+}
+
 export async function updateApplicationStatus(
   id: string,
   status: ApplicationStatus,
@@ -61,8 +66,22 @@ export async function updateApplicationStatus(
 ): Promise<ApplicationResponse> {
   return fetchApi<ApplicationResponse>(`/applications/${id}/status`, {
     method: 'PUT',
-    body: JSON.stringify({ status, note: note || null }),
+    body: JSON.stringify({ status, note }),
   });
+}
+
+export async function updateFollowUpDate(
+  id: string,
+  followUpDate: string | null
+): Promise<ApplicationResponse> {
+  return fetchApi<ApplicationResponse>(`/applications/${id}/follow-up`, {
+    method: 'PUT',
+    body: JSON.stringify({ followUpDate }),
+  });
+}
+
+export async function getDueFollowUps(): Promise<ApplicationResponse[]> {
+  return fetchApi<ApplicationResponse[]>('/applications/due-followups');
 }
 
 export async function getApplicationTimeline(id: string): Promise<ApplicationEventResponse[]> {

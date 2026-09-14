@@ -14,5 +14,6 @@ public record ApplicationResponse(
         Integer matchScore,
         MatchResult matchResult,
         String notes,
+        java.time.LocalDate followUpDate,
         Instant createdAt
 ) {}

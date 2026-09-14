@@ -40,6 +40,35 @@ export async function createJob(request: JobRequest): Promise<JobResponse> {
   });
 }
 
-export async function listJobs(): Promise<JobResponse[]> {
-  return fetchApi<JobResponse[]>('/jobs');
+export interface JobFilters {
+  search?: string;
+  workMode?: string;
+  employmentType?: string;
+  minMatchScore?: number;
+}
+
+export async function listJobs(filters?: JobFilters): Promise<JobResponse[]> {
+  const params = new URLSearchParams();
+  if (filters?.search) params.append('search', filters.search);
+  if (filters?.workMode && filters.workMode !== 'Any') params.append('workMode', filters.workMode);
+  if (filters?.employmentType && filters.employmentType !== 'Any') params.append('employmentType', filters.employmentType);
+  if (filters?.minMatchScore !== undefined && filters.minMatchScore > 0) params.append('minMatchScore', filters.minMatchScore.toString());
+  
+  const query = params.toString();
+  return fetchApi<JobResponse[]>(`/jobs${query ? `?${query}` : ''}`);
+}
+
+export interface JobDiscoveryResponse {
+  draft: JobRequest | null;
+  matchScore: number | null;
+  matchedSkills: string[];
+  missingSkills: string[];
+  reasonSummary: string;
+  source: string;
+  noResultReason: string | null;
+  warning: string | null;
+}
+
+export async function discoverJobs(): Promise<JobDiscoveryResponse[]> {
+  return fetchApi<JobDiscoveryResponse[]>('/jobs/discover');
 }

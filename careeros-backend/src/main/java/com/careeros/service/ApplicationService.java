@@ -87,6 +87,27 @@ public class ApplicationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public ApplicationResponse getApplication(User user, UUID id) {
+        Application app = applicationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Application not found"));
+        if (!app.getUser().getId().equals(user.getId())) {
+            throw new ResourceNotFoundException("Application not found");
+        }
+        
+        MatchResult matchResult = null;
+        if (app.getResume() != null) {
+            CandidateProfile profile = candidateProfileRepository.findByResumeId(app.getResume().getId()).orElse(null);
+            if (profile != null) {
+                List<CandidateSkill> candSkills = candidateSkillRepository.findByCandidateProfileId(profile.getId());
+                List<JobSkill> jobSkills = jobSkillRepository.findByJobId(app.getJob().getId());
+                matchResult = matchService.calculate(profile, candSkills, app.getJob(), jobSkills);
+            }
+        }
+        
+        return toResponse(app, matchResult);
+    }
+
     @Transactional
     public ApplicationResponse updateStatus(User user, UUID id, ApplicationStatusUpdateRequest req) {
         Application app = applicationRepository.findById(id)
@@ -97,6 +118,11 @@ public class ApplicationService {
 
         ApplicationStatus oldStatus = app.getStatus();
         app.setStatus(req.status());
+        
+        if (req.status() == ApplicationStatus.APPLIED && app.getFollowUpDate() == null) {
+            app.setFollowUpDate(java.time.LocalDate.now().plusDays(14));
+        }
+
         app = applicationRepository.save(app);
 
         ApplicationEvent event = new ApplicationEvent();
@@ -121,6 +147,33 @@ public class ApplicationService {
                 .toList();
     }
 
+    @Transactional
+    public ApplicationResponse updateFollowUpDate(User user, UUID id, com.careeros.dto.ApplicationFollowUpRequest req) {
+        Application app = applicationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Application not found"));
+        if (!app.getUser().getId().equals(user.getId())) {
+            throw new ResourceNotFoundException("Application not found");
+        }
+        
+        app.setFollowUpDate(req.followUpDate());
+        app = applicationRepository.save(app);
+        return toResponse(app, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ApplicationResponse> getDueFollowUps(User user) {
+        return applicationRepository.findByUserAndFollowUpDateLessThanEqualAndStatusNotInOrderByFollowUpDateAsc(
+                user,
+                java.time.LocalDate.now(),
+                java.util.List.of(
+                        ApplicationStatus.REJECTED,
+                        ApplicationStatus.WITHDRAWN,
+                        ApplicationStatus.POSITION_CLOSED,
+                        ApplicationStatus.OFFER
+                )
+        ).stream().map(app -> toResponse(app, null)).toList();
+    }
+
     private ApplicationResponse toResponse(Application app, MatchResult matchResult) {
         return new ApplicationResponse(
                 app.getId(),
@@ -132,6 +185,7 @@ public class ApplicationService {
                 app.getMatchScore(),
                 matchResult,
                 app.getNotes(),
+                app.getFollowUpDate(),
                 app.getCreatedAt()
         );
     }

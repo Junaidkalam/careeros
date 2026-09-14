@@ -48,6 +48,7 @@ public class ResumeService {
     private final ResumeRepository resumeRepository;
     private final CandidateProfileRepository candidateProfileRepository;
     private final CandidateSkillRepository candidateSkillRepository;
+    private final com.careeros.repository.ApplicationRepository applicationRepository;
     private final FileStorageService fileStorageService;
     private final ResumeTextExtractor textExtractor;
     private final AiClient aiClient;
@@ -176,6 +177,33 @@ public class ResumeService {
             }
         }
         return toResponse(resume, profile, saved, null);
+    }
+
+    // ------------------------------------------------
+    // Delete
+    // ------------------------------------------------
+
+    @Transactional
+    public void delete(User user, UUID id) {
+        Resume resume = resumeRepository.findByIdAndUser(id, user)
+                .orElseThrow(() -> new ResourceNotFoundException("Resume not found: " + id));
+        
+        // Disassociate from any applications
+        List<com.careeros.entity.Application> apps = applicationRepository.findByResume(resume);
+        for (com.careeros.entity.Application app : apps) {
+            app.setResume(null);
+            applicationRepository.save(app);
+        }
+
+        // CandidateProfile and CandidateSkills are handled by JPA cascade if configured,
+        // but we can manually delete profile to be safe.
+        candidateProfileRepository.findByResumeId(resume.getId()).ifPresent(profile -> {
+            List<CandidateSkill> skills = candidateSkillRepository.findByCandidateProfileId(profile.getId());
+            candidateSkillRepository.deleteAll(skills);
+            candidateProfileRepository.delete(profile);
+        });
+
+        resumeRepository.delete(resume);
     }
 
     // ------------------------------------------------

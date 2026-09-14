@@ -99,26 +99,35 @@ public class JobExtractionService {
 
         // - 2. LLM fallback -
         String pageText = extractPageText(doc);
-        if (pageText.isBlank()) {
+        return extractFromText(pageText, url);
+    }
+
+    /**
+     * Extracts job details using the LLM given a raw text string (e.g. from an API response like Adzuna).
+     */
+    public JobExtractionResponse extractFromText(String text, String url) {
+        if (text == null || text.isBlank()) {
             return new JobExtractionResponse(
                     stubDraft(url),
                     false,
-                    "No extractable content found on the page"
+                    "No extractable content found"
             );
         }
 
         try {
-            String prompt   = buildExtractionPrompt(pageText, url);
+            // Trim to avoid hitting token limits on arbitrarily large text blocks
+            String safeText = text.length() > MAX_TEXT_CHARS ? text.substring(0, MAX_TEXT_CHARS) : text;
+            
+            String prompt   = buildExtractionPrompt(safeText, url);
             String rawJson  = aiClient.callForJson(prompt);
             JobRequest draft = parseLlmResponse(rawJson, url);
             return new JobExtractionResponse(draft, false, null);
         } catch (AiClientException e) {
             log.warn("AI extraction failed for {}: {}", url, e.getMessage());
             // Return a partial draft so the user still sees something useful.
-            // Cap description at 2 000 chars to avoid an enormous JSON response.
-            String snippet = pageText.length() > 2_000
-                    ? pageText.substring(0, 2_000) + "-"
-                    : pageText;
+            String snippet = text.length() > 2_000
+                    ? text.substring(0, 2_000) + "..."
+                    : text;
             JobRequest partial = new JobRequest(
                     null, null, null, null, null,
                     snippet, url, SOURCE_LABEL,

@@ -1,25 +1,15 @@
 import { useEffect, useState } from 'react';
-import { listJobs, importJob, createJob, JobResponse, JobRequest } from '../lib/jobs';
+import { listJobs, importJob, createJob, discoverJobs, JobResponse, JobRequest, JobDiscoveryResponse } from '../lib/jobs';
 import { ApiError } from '../lib/api';
-import { Plus, X, AlertTriangle, Link as LinkIcon } from 'lucide-react';
+import { Plus, X, AlertTriangle, Link as LinkIcon, MapPin, MonitorPlay, DollarSign, Search, Briefcase, ChevronRight, Filter, Sparkles } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
+import { Badge } from '../components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '../components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
-/* --- */
-const inputCls = "block w-full rounded-sm py-2 px-3 text-[14px] focus:outline-none";
-const inputStyle = { background: '#FDFCFB', border: '1px solid #D6D3D1', transition: 'border-color 0.15s' };
-const handleFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-  (e.currentTarget.style.borderColor = '#0F766E');
-const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-  (e.currentTarget.style.borderColor = '#D6D3D1');
-
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <label className="block text-[12px] font-semibold tracking-wider uppercase text-stone-500 mb-1.5">
-      {children}
-    </label>
-  );
-}
-
-/* --- */
 function TagsInput({ label, tags, onChange }: { label: string; tags: string[]; onChange: (t: string[]) => void }) {
   const [input, setInput] = useState('');
   const addTag = () => {
@@ -29,76 +19,70 @@ function TagsInput({ label, tags, onChange }: { label: string; tags: string[]; o
     }
   };
   return (
-    <div>
-      <FieldLabel>{label}</FieldLabel>
+    <div className="space-y-2">
+      <Label>{label}</Label>
       <div className="flex flex-wrap gap-1.5 mb-2">
         {tags.map((tag, i) => (
-          <span
-            key={i}
-            className="inline-flex items-center text-[12px] font-medium px-2 py-0.5 rounded-sm"
-            style={{ background: '#F0FDFA', color: '#0F766E', border: '1px solid #99F6E4' }}
-          >
+          <Badge key={i} variant="secondary" className="flex items-center gap-1 bg-secondary/50 hover:bg-secondary/70 transition-colors py-1">
             {tag}
             <button
               type="button"
               onClick={() => onChange(tags.filter(t => t !== tag))}
-              className="ml-1.5 text-teal-400 hover:text-teal-700"
+              className="text-muted-foreground hover:text-foreground ml-1"
             >
-              &times;
+              <X className="w-3 h-3" />
             </button>
-          </span>
+          </Badge>
         ))}
       </div>
       <div className="flex gap-2">
-        <input
+        <Input
           type="text"
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-          className={inputCls + " flex-1"}
-          style={inputStyle}
-          onFocus={handleFocus} onBlur={handleBlur}
           placeholder="Type and press Enter..."
+          className="flex-1"
         />
-        <button
-          type="button"
-          onClick={addTag}
-          className="px-3 py-2 text-[13px] font-medium text-stone-600 rounded-sm"
-          style={{ border: '1px solid #D6D3D1', background: '#FDFCFB' }}
-        >
-          Add
-        </button>
+        <Button type="button" variant="secondary" onClick={addTag}>Add</Button>
       </div>
     </div>
   );
 }
 
-/* --- */
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="py-20 text-center">
-      <div
-        className="text-[13px] text-stone-400 mb-4"
-        style={{ fontFamily: '"IBM Plex Sans", system-ui, sans-serif' }}
-      >
-        No jobs saved yet.
+    <div className="flex flex-col items-center justify-center py-24 px-4 text-center bg-card/50 border border-dashed rounded-xl">
+      <div className="w-12 h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center mb-4">
+        <Briefcase className="w-6 h-6" />
       </div>
-      <button
-        onClick={onAdd}
-        className="text-[13px] font-medium"
-        style={{ color: '#0F766E' }}
-      >
-        + Add your first job
-      </button>
+      <h3 className="text-lg font-semibold text-foreground mb-1">No jobs saved yet</h3>
+      <p className="text-sm text-muted-foreground max-w-sm mb-6">
+        Keep track of all the roles you're interested in applying for. Import from a URL or add manually.
+      </p>
+      <Button onClick={onAdd} className="gap-2">
+        <Plus className="w-4 h-4" /> Add your first job
+      </Button>
     </div>
   );
 }
 
-/* --- */
 export default function Jobs() {
   const [jobs, setJobs] = useState<JobResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [workModeFilter, setWorkModeFilter] = useState('Any');
+  const [employmentTypeFilter, setEmploymentTypeFilter] = useState('Any');
+  const [minMatchScoreFilter, setMinMatchScoreFilter] = useState('Any');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Import
   const [importUrl, setImportUrl] = useState('');
@@ -115,19 +99,55 @@ export default function Jobs() {
   const [formData, setFormData] = useState<JobRequest>(emptyForm);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Discovery
+  const [discoveredJobs, setDiscoveredJobs] = useState<JobDiscoveryResponse[]>([]);
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [showDiscovery, setShowDiscovery] = useState(false);
+
+  const handleDiscover = async () => {
+    setIsDiscovering(true);
+    setDiscoveryError(null);
+    setShowDiscovery(true);
+    try {
+      const results = await discoverJobs();
+      setDiscoveredJobs(results);
+    } catch (err: any) {
+      setDiscoveryError(err?.detail || err?.error || err?.message || 'Failed to discover jobs');
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
+  const saveDiscoveredJob = (draft: JobRequest) => {
+    setImportUrl(''); setImportWarning(null); setImportError(null);
+    setSaveError(null);
+    setFormData({ ...draft, requiredSkills: draft.requiredSkills || [], preferredSkills: draft.preferredSkills || [] });
+    setIsModalOpen(true);
+  };
+
 
   const fetchJobs = async () => {
     setLoadError(null);
-    try { setJobs(await listJobs()); }
+    try {
+      const filters = {
+        search: debouncedSearch,
+        workMode: workModeFilter,
+        employmentType: employmentTypeFilter,
+        minMatchScore: minMatchScoreFilter === 'Any' ? undefined : parseInt(minMatchScoreFilter, 10),
+      };
+      setJobs(await listJobs(filters));
+    }
     catch (err: any) {
       console.error('fetchJobs error:', err);
       setLoadError(err?.detail || err?.error || err?.message || 'Failed to load jobs');
     }
     finally { setIsLoading(false); }
   };
-  useEffect(() => { fetchJobs(); }, []);
+
+  useEffect(() => { fetchJobs(); }, [debouncedSearch, workModeFilter, employmentTypeFilter, minMatchScoreFilter]);
 
   const openModal = () => {
     setImportUrl(''); setImportWarning(null); setImportError(null);
@@ -170,297 +190,361 @@ export default function Jobs() {
     } finally { setIsSaving(false); }
   };
 
-  /* --- */
-  const cols = ['Role', 'Company', 'Location', 'Work Mode', 'Posted'];
-
   return (
-    <div>
+    <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <h1
-          className="text-[24px]"
-          style={{ fontFamily: '"DM Serif Display", Georgia, serif', color: '#1C1917', fontWeight: 400 }}
-        >
-          Jobs
-        </h1>
-        <button
-          onClick={openModal}
-          className="inline-flex items-center gap-1.5 text-[13px] font-medium"
-          style={{ color: '#0F766E' }}
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add Job
-        </button>
-      </div>
-
-      {/* Table */}
-      {loadError && (
-        <div
-          className="mb-4 text-[13px] text-red-700 py-2 px-3 rounded-sm flex items-center gap-2"
-          style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}
-        >
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          {loadError}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Jobs</h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage and track your target roles.</p>
         </div>
-      )}
-      {isLoading ? (
-        <div className="flex justify-center py-16">
-          <div
-            className="animate-spin rounded-full h-5 w-5 border-2 border-transparent"
-            style={{ borderTopColor: '#0F766E', borderRightColor: '#0F766E' }}
-          />
-        </div>
-      ) : loadError ? null : jobs.length === 0 ? (
-        <EmptyState onAdd={openModal} />
-      ) : (
-        <div style={{ borderTop: '1px solid #D6D3D1', borderBottom: '1px solid #D6D3D1' }}>
-          <table className="w-full">
-            <thead>
-              <tr style={{ borderBottom: '1px solid #D6D3D1' }}>
-                {cols.map(c => (
-                  <th
-                    key={c}
-                    className="px-4 py-3 text-left text-[13px] font-medium"
-                    style={{ color: '#78716C' }}
-                  >
-                    {c}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.map((job, idx) => (
-                <tr
-                  key={job.id}
-                  style={{
-                    background: idx % 2 === 1 ? '#FAFAF9' : 'transparent',
-                    borderBottom: '1px solid #E7E5E4',
-                  }}
-                >
-                  <td className="px-4 py-3 text-[14px] font-medium" style={{ color: '#1C1917' }}>
-                    {job.title}
-                  </td>
-                  <td className="px-4 py-3 text-[14px]" style={{ color: '#44403C' }}>
-                    {job.companyName}
-                  </td>
-                  <td className="px-4 py-3 text-[13px]" style={{ color: '#78716C' }}>
-                    {job.location || '--'}
-                  </td>
-                  <td className="px-4 py-3 text-[13px]" style={{ color: '#78716C' }}>
-                    {job.workMode || '--'}
-                  </td>
-                  <td className="px-4 py-3 text-[13px] stat-number" style={{ color: '#78716C' }}>
-                    {job.postedDate || '--'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full xl:w-auto overflow-x-auto pb-2 xl:pb-0 scrollbar-hide">
+          <div className="relative shrink-0">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search jobs..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-full sm:w-[200px] bg-card"
+            />
+          </div>
+          
+          <Select value={workModeFilter} onValueChange={setWorkModeFilter}>
+            <SelectTrigger className="w-[130px] shrink-0 bg-card">
+              <SelectValue placeholder="Work Mode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Any">Any Mode</SelectItem>
+              <SelectItem value="REMOTE">Remote</SelectItem>
+              <SelectItem value="HYBRID">Hybrid</SelectItem>
+              <SelectItem value="ONSITE">Onsite</SelectItem>
+            </SelectContent>
+          </Select>
 
-      {/* Modal */}
-      {isModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
-          style={{ background: 'rgba(28,25,23,0.5)' }}
-        >
-          <div
-            className="w-full max-h-[90vh] overflow-y-auto"
-            style={{ maxWidth: 640, background: '#FDFCFB', borderRadius: 4, border: '1px solid #D6D3D1' }}
-          >
-            {/* Modal header */}
-            <div
-              className="flex items-center justify-between px-6 py-4 sticky top-0"
-              style={{ background: '#FDFCFB', borderBottom: '1px solid #D6D3D1', zIndex: 10 }}
-            >
-              <h2
-                className="text-[18px]"
-                style={{ fontFamily: '"DM Serif Display", Georgia, serif', color: '#1C1917', fontWeight: 400 }}
-              >
-                Add New Job
-              </h2>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-stone-400 hover:text-stone-700 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+          <Select value={employmentTypeFilter} onValueChange={setEmploymentTypeFilter}>
+            <SelectTrigger className="w-[140px] shrink-0 bg-card">
+              <SelectValue placeholder="Job Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Any">Any Type</SelectItem>
+              <SelectItem value="Full-time">Full-time</SelectItem>
+              <SelectItem value="Part-time">Part-time</SelectItem>
+              <SelectItem value="Contract">Contract</SelectItem>
+              <SelectItem value="Internship">Internship</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Select value={minMatchScoreFilter} onValueChange={setMinMatchScoreFilter}>
+            <SelectTrigger className="w-[140px] shrink-0 bg-card">
+              <SelectValue placeholder="Match Score" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Any">Any Score</SelectItem>
+              <SelectItem value="50">50%+ Match</SelectItem>
+              <SelectItem value="70">70%+ Match</SelectItem>
+              <SelectItem value="90">90%+ Match</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <div className="px-6 py-5 space-y-5">
-              {/* Import section */}
-              <div
-                className="p-4 rounded-sm"
-                style={{ background: '#F0FDFA', border: '1px solid #99F6E4' }}
-              >
-                <div className="text-[12px] font-semibold tracking-wider uppercase text-teal-700 mb-2">
-                  Import from URL (Optional)
-                </div>
+          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            
+            <Button onClick={handleDiscover} variant="outline" className="gap-2 shrink-0 ml-auto xl:ml-0" disabled={isDiscovering}>
+              <Sparkles className="w-4 h-4 text-amber-500" /> Discover Jobs
+            </Button>
+            <DialogTrigger asChild>
+
+              <Button onClick={openModal} className="gap-2 shrink-0 ml-auto xl:ml-0">
+                <Plus className="w-4 h-4" /> Add Job
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Add New Job</DialogTitle>
+                <DialogDescription>
+                  Import job details from a URL or enter them manually.
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Import Section */}
+              <div className="p-4 bg-secondary/30 rounded-lg border border-border/50">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-3 block font-semibold">Auto-Import (Optional)</Label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <LinkIcon className="absolute left-3 top-2.5 h-4 w-4 text-stone-400" />
-                    <input
+                    <LinkIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
                       type="url"
                       value={importUrl}
                       onChange={e => setImportUrl(e.target.value)}
                       placeholder="https://boards.greenhouse.io/..."
-                      className={inputCls + " pl-9"}
-                      style={{ ...inputStyle, background: '#FDFCFB' }}
-                      onFocus={handleFocus} onBlur={handleBlur}
+                      className="pl-9 bg-background"
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleImport}
-                    disabled={!importUrl || isImporting}
-                    className="px-4 py-2 text-[13px] font-medium text-white rounded-sm disabled:opacity-50"
-                    style={{ background: '#0F766E' }}
-                  >
+                  <Button type="button" variant="secondary" onClick={handleImport} disabled={!importUrl || isImporting}>
                     {isImporting ? 'Importing...' : 'Import'}
-                  </button>
+                  </Button>
                 </div>
                 {importError && (
-                  <p className="mt-2 text-[12px] text-red-700 flex items-start gap-1 break-words">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {importError}
+                  <p className="mt-3 text-xs text-destructive flex items-center gap-1.5 bg-destructive/10 p-2 rounded-md">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {importError}
                   </p>
                 )}
                 {importWarning && (
-                  <p className="mt-2 text-[12px] flex items-start gap-1 text-orange-600 break-words">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {importWarning}
+                  <p className="mt-3 text-xs text-orange-600 flex items-center gap-1.5 bg-orange-50 p-2 rounded-md dark:bg-orange-950/50 dark:text-orange-400">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {importWarning}
                   </p>
                 )}
               </div>
 
-              {/* Divider */}
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full" style={{ borderTop: '1px solid #D6D3D1' }} />
-                </div>
-                <div className="relative flex justify-center">
-                  <span
-                    className="px-3 text-[12px] text-stone-400"
-                    style={{ background: '#FDFCFB' }}
-                  >
-                    Review & Save
-                  </span>
-                </div>
+              <div className="relative py-2">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center text-xs uppercase font-semibold"><span className="bg-card px-2 text-muted-foreground">Or Enter Manually</span></div>
               </div>
 
-              {/* Form */}
-              <form onSubmit={handleSave} className="space-y-4">
+              <form onSubmit={handleSave} className="space-y-5">
                 {saveError && (
-                  <div
-                    className="text-[13px] text-red-700 py-2 px-3 rounded-sm bg-red-50"
-                    style={{ border: '1px solid #FECACA' }}
-                  >
+                  <div className="text-sm text-destructive py-2 px-3 rounded-md bg-destructive/10 border border-destructive/20 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
                     {saveError}
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <FieldLabel>Job Title *</FieldLabel>
-                    <input required type="text" value={formData.title}
-                      onChange={e => setFormData({ ...formData, title: e.target.value })}
-                      className={inputCls} style={inputStyle} onFocus={handleFocus} onBlur={handleBlur}
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Job Title *</Label>
+                    <Input required value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
                   </div>
-                  <div>
-                    <FieldLabel>Company Name *</FieldLabel>
-                    <input required type="text" value={formData.companyName}
-                      onChange={e => setFormData({ ...formData, companyName: e.target.value })}
-                      className={inputCls} style={inputStyle} onFocus={handleFocus} onBlur={handleBlur}
-                    />
+                  <div className="space-y-2">
+                    <Label>Company Name *</Label>
+                    <Input required value={formData.companyName} onChange={e => setFormData({ ...formData, companyName: e.target.value })} />
                   </div>
-                  <div className="col-span-2">
-                    <FieldLabel>URL</FieldLabel>
-                    <input type="url" value={formData.postingUrl || ''}
-                      onChange={e => setFormData({ ...formData, postingUrl: e.target.value })}
-                      className={inputCls} style={inputStyle} onFocus={handleFocus} onBlur={handleBlur}
-                    />
+                  <div className="sm:col-span-2 space-y-2">
+                    <Label>URL</Label>
+                    <Input type="url" value={formData.postingUrl || ''} onChange={e => setFormData({ ...formData, postingUrl: e.target.value })} />
                   </div>
-                  <div>
-                    <FieldLabel>Location</FieldLabel>
-                    <input type="text" value={formData.location || ''}
-                      onChange={e => setFormData({ ...formData, location: e.target.value })}
-                      className={inputCls} style={inputStyle} onFocus={handleFocus} onBlur={handleBlur}
-                    />
+                  <div className="space-y-2">
+                    <Label>Location</Label>
+                    <Input value={formData.location || ''} onChange={e => setFormData({ ...formData, location: e.target.value })} />
                   </div>
-                  <div>
-                    <FieldLabel>Work Mode</FieldLabel>
-                    <input type="text" value={formData.workMode || ''} placeholder="Remote, Hybrid..."
-                      onChange={e => setFormData({ ...formData, workMode: e.target.value })}
-                      className={inputCls} style={inputStyle} onFocus={handleFocus} onBlur={handleBlur}
-                    />
+                  <div className="space-y-2">
+                    <Label>Work Mode</Label>
+                    <Select value={formData.workMode || ''} onValueChange={v => setFormData({ ...formData, workMode: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="REMOTE">Remote</SelectItem>
+                        <SelectItem value="HYBRID">Hybrid</SelectItem>
+                        <SelectItem value="ONSITE">Onsite</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div>
-                    <FieldLabel>Employment Type</FieldLabel>
-                    <input type="text" value={formData.employmentType || ''} placeholder="FULL_TIME..."
-                      onChange={e => setFormData({ ...formData, employmentType: e.target.value })}
-                      className={inputCls} style={inputStyle} onFocus={handleFocus} onBlur={handleBlur}
-                    />
+                  <div className="space-y-2">
+                    <Label>Employment Type</Label>
+                    <Select value={formData.employmentType || ''} onValueChange={v => setFormData({ ...formData, employmentType: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Full-time">Full-time</SelectItem>
+                        <SelectItem value="Part-time">Part-time</SelectItem>
+                        <SelectItem value="Contract">Contract</SelectItem>
+                        <SelectItem value="Internship">Internship</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div>
-                    <FieldLabel>Base Salary</FieldLabel>
-                    <input type="text" value={formData.salaryRange || ''} placeholder="$100k - $130k"
-                      onChange={e => setFormData({ ...formData, salaryRange: e.target.value })}
-                      className={inputCls} style={inputStyle} onFocus={handleFocus} onBlur={handleBlur}
-                    />
+                  <div className="space-y-2">
+                    <Label>Posted Date</Label>
+                    <Input type="date" value={formData.postedDate || ''} onChange={e => setFormData({ ...formData, postedDate: e.target.value })} />
                   </div>
-                  <div>
-                    <FieldLabel>Posted Date</FieldLabel>
-                    <input type="text" value={formData.postedDate || ''} placeholder="YYYY-MM-DD"
-                      onChange={e => setFormData({ ...formData, postedDate: e.target.value })}
-                      className={inputCls} style={inputStyle} onFocus={handleFocus} onBlur={handleBlur}
-                    />
+                  <div className="space-y-2">
+                    <Label>Salary Range</Label>
+                    <Input placeholder="$120k - $150k" value={formData.salaryRange || ''} onChange={e => setFormData({ ...formData, salaryRange: e.target.value })} />
+                  </div>
+                  <div className="sm:col-span-2 space-y-2">
+                    <Label>Description</Label>
+                    <Textarea className="h-24 resize-none" value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <TagsInput label="Required Skills" tags={formData.requiredSkills || []} onChange={t => setFormData({ ...formData, requiredSkills: t })} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <TagsInput label="Preferred Skills" tags={formData.preferredSkills || []} onChange={t => setFormData({ ...formData, preferredSkills: t })} />
                   </div>
                 </div>
 
-                <div>
-                  <FieldLabel>Description</FieldLabel>
-                  <textarea
-                    rows={4} value={formData.description || ''}
-                    onChange={e => setFormData({ ...formData, description: e.target.value })}
-                    className={inputCls} style={{ ...inputStyle, resize: 'vertical' }}
-                    onFocus={handleFocus} onBlur={handleBlur}
-                  />
-                </div>
-
-                <TagsInput label="Required Skills"
-                  tags={formData.requiredSkills || []}
-                  onChange={tags => setFormData({ ...formData, requiredSkills: tags })}
-                />
-                <TagsInput label="Preferred Skills"
-                  tags={formData.preferredSkills || []}
-                  onChange={tags => setFormData({ ...formData, preferredSkills: tags })}
-                />
-
-                {/* Footer */}
-                <div
-                  className="pt-4 flex justify-end gap-3"
-                  style={{ borderTop: '1px solid #D6D3D1' }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 text-[13px] font-medium text-stone-600 rounded-sm"
-                    style={{ border: '1px solid #D6D3D1', background: '#FDFCFB' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="px-4 py-2 text-[13px] font-medium text-white rounded-sm disabled:opacity-50"
-                    style={{ background: '#0F766E' }}
-                  >
-                    {isSaving ? 'Saving...' : 'Save Job'}
-                  </button>
-                </div>
+                <DialogFooter className="pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+                  <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Job'}</Button>
+                </DialogFooter>
               </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      
+      {showDiscovery && (
+        <div className="bg-amber-50/50 dark:bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 mb-8 relative">
+          <div className="absolute top-4 right-4">
+            <Button variant="ghost" size="icon" onClick={() => setShowDiscovery(false)}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Recommended for You</h2>
+              <p className="text-sm text-muted-foreground">Jobs discovered via Adzuna based on your profile.</p>
             </div>
           </div>
+          
+          {isDiscovering ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[...Array(2)].map((_, i) => (
+                <div key={i} className="h-40 rounded-xl bg-amber-500/5 animate-pulse border border-amber-500/10" />
+              ))}
+            </div>
+          ) : discoveryError ? (
+            <div className="text-sm text-destructive py-3 px-4 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              {discoveryError}
+            </div>
+          ) : discoveredJobs.length > 0 && discoveredJobs[0].noResultReason ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground mb-2">{discoveredJobs[0].warning || 'No results found.'}</p>
+              <p className="text-sm font-medium">{discoveredJobs[0].reasonSummary}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {discoveredJobs.map((dj, i) => dj.draft && (
+                <div key={i} className="bg-background rounded-xl p-5 border border-border hover:border-amber-500/30 transition-colors shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="font-semibold text-foreground">{dj.draft.title}</h4>
+                      {dj.matchScore !== null ? (
+                        <Badge variant={dj.matchScore >= 70 ? 'default' : 'secondary'} className={dj.matchScore >= 70 ? 'bg-amber-500 hover:bg-amber-600' : ''}>
+                          {dj.matchScore}% Match
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground border-dashed">
+                          No Score
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-muted-foreground mb-4">{dj.draft.companyName}</p>
+                    <div className="flex flex-wrap gap-2 text-[12px] font-medium mb-4">
+                      {dj.draft.location && <span className="bg-secondary px-2 py-1 rounded-md">{dj.draft.location}</span>}
+                      {dj.draft.employmentType && <span className="bg-secondary px-2 py-1 rounded-md">{dj.draft.employmentType}</span>}
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2 italic mb-4">{dj.reasonSummary}</p>
+                  </div>
+                  <div className="pt-3 border-t flex justify-end">
+                    <Button size="sm" onClick={() => saveDiscoveredJob(dj.draft!)} className="gap-2">
+                      <Plus className="w-3.5 h-3.5" /> Save Job
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+
+      {loadError && (
+        <div className="text-sm text-destructive py-3 px-4 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          {loadError}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-64 rounded-2xl bg-secondary/30 animate-pulse border border-border/30" />
+          ))}
+        </div>
+      ) : jobs.length === 0 ? (
+        (debouncedSearch || workModeFilter !== 'Any' || employmentTypeFilter !== 'Any' || minMatchScoreFilter !== 'Any') ? (
+          <div className="text-center py-20 text-muted-foreground border border-dashed rounded-xl bg-card/20">
+            <Filter className="w-8 h-8 mx-auto mb-3 opacity-20" />
+            <p>No jobs match your current filters.</p>
+            <Button variant="link" onClick={() => {
+              setSearchQuery('');
+              setWorkModeFilter('Any');
+              setEmploymentTypeFilter('Any');
+              setMinMatchScoreFilter('Any');
+            }}>Clear all filters</Button>
+          </div>
+        ) : (
+          <EmptyState onAdd={openModal} />
+        )
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {jobs.map((job) => (
+            <div key={job.id} className="group relative flex flex-col justify-between p-6 rounded-2xl glass-panel hover:-translate-y-1 transition-all duration-300 premium-shadow cursor-pointer overflow-hidden border border-border/40 hover:border-primary/30">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none group-hover:bg-primary/10 transition-colors" />
+              
+              <div className="relative z-10">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10 flex items-center justify-center text-primary font-bold text-lg shadow-sm shrink-0">
+                    {job.companyName.charAt(0).toUpperCase()}
+                  </div>
+                  {job.postedDate ? (
+                    <div className="text-[11px] font-bold tracking-widest text-muted-foreground/50 uppercase stat-number">
+                      {new Date(job.postedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </div>
+                  ) : null}
+                </div>
+                
+                <h4 className="text-[17px] font-semibold text-foreground group-hover:text-primary transition-colors leading-tight mb-1">
+                  {job.title}
+                </h4>
+                <p className="text-sm font-medium text-muted-foreground mb-4">
+                  {job.companyName}
+                </p>
+                
+                <div className="flex flex-wrap gap-2 mb-6 text-[12px] font-medium">
+                  {job.salaryRange && (
+                    <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-1 rounded-md border border-green-500/20">
+                      <DollarSign className="w-3.5 h-3.5" /> {job.salaryRange}
+                    </span>
+                  )}
+                  {job.location && (
+                    <span className="flex items-center gap-1.5 text-muted-foreground bg-secondary/80 px-2 py-1 rounded-md">
+                      <MapPin className="w-3 h-3" /> {job.location}
+                    </span>
+                  )}
+                  {job.workMode && (
+                    <span className="flex items-center gap-1.5 text-muted-foreground bg-secondary/80 px-2 py-1 rounded-md">
+                      <MonitorPlay className="w-3 h-3" /> {job.workMode}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="relative z-10 mt-auto pt-4 border-t border-border/40 flex items-center justify-between">
+                <div className="flex -space-x-1.5">
+                  {(job.requiredSkills || []).slice(0, 3).map((skill, i) => (
+                    <div key={i} className="px-2 py-0.5 rounded-md bg-background border border-border text-[10px] font-semibold text-foreground shadow-sm truncate max-w-[80px]" title={skill}>
+                      {skill}
+                    </div>
+                  ))}
+                  {(job.requiredSkills || []).length > 3 && (
+                    <div className="px-2 py-0.5 rounded-md bg-secondary border border-border text-[10px] font-semibold text-muted-foreground shadow-sm">
+                      +{(job.requiredSkills || []).length - 3}
+                    </div>
+                  )}
+                  {(!job.requiredSkills || job.requiredSkills.length === 0) && (
+                    <span className="text-[11px] text-muted-foreground/60 italic">No skills listed</span>
+                  )}
+                </div>
+                <Button variant="ghost" size="sm" className="h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                  View <ChevronRight className="w-3 h-3 ml-1" />
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

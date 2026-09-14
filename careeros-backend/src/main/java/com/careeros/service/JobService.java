@@ -2,11 +2,14 @@ package com.careeros.service;
 
 import com.careeros.dto.JobRequest;
 import com.careeros.dto.JobResponse;
+import com.careeros.entity.Application;
 import com.careeros.entity.Company;
 import com.careeros.entity.Job;
 import com.careeros.entity.JobSkill;
 import com.careeros.entity.User;
 import com.careeros.entity.enums.SkillType;
+import com.careeros.entity.enums.WorkMode;
+import com.careeros.repository.ApplicationRepository;
 import com.careeros.repository.CompanyRepository;
 import com.careeros.repository.JobRepository;
 import com.careeros.repository.JobSkillRepository;
@@ -15,7 +18,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -24,10 +29,10 @@ public class JobService {
     private final JobRepository jobRepository;
     private final CompanyRepository companyRepository;
     private final JobSkillRepository jobSkillRepository;
+    private final ApplicationRepository applicationRepository;
 
     @Transactional
     public JobResponse createJob(User user, JobRequest request) {
-        // Cheap duplicate check (Phase 1 signal: same posting URL for this user).
         if (request.postingUrl() != null
                 && jobRepository.existsByUserAndPostingUrl(user, request.postingUrl())) {
             throw new IllegalStateException("This job appears to already exist in your tracker.");
@@ -48,7 +53,7 @@ public class JobService {
         job.setPostedDate(request.postedDate());
         job.setSalaryRange(request.salaryRange());
         job.setRequiredExperienceYears(request.requiredExperienceYears());
-        job.setReviewed(true); // set false upstream if this came straight from extraction, pre-review
+        job.setReviewed(true); 
 
         Job saved = jobRepository.save(job);
         saveSkills(saved, request.requiredSkills(), SkillType.REQUIRED);
@@ -58,10 +63,39 @@ public class JobService {
     }
 
     public List<JobResponse> listJobs(User user) {
-        return jobRepository.findByUserOrderByCreatedAtDesc(user)
-                .stream()
-                .map(this::toResponse)
+        return listJobs(user, null, null, null, null);
+    }
+
+    public List<JobResponse> listJobs(User user, String search, WorkMode workMode, String employmentType, Integer minMatchScore) {
+        List<Job> jobs;
+        
+        if (search == null && workMode == null && employmentType == null) {
+            jobs = jobRepository.findByUserOrderByCreatedAtDesc(user);
+        } else {
+            jobs = jobRepository.findWithFilters(user, search, workMode, employmentType);
+        }
+
+        if (minMatchScore != null && !jobs.isEmpty()) {
+            List<Application> apps = applicationRepository.findByUserAndJobIn(user, jobs);
+            
+            // Map each Job ID to its most recently created Application
+            Map<UUID, Application> latestAppByJob = apps.stream()
+                .collect(Collectors.toMap(
+                    a -> a.getJob().getId(),
+                    a -> a,
+                    (a1, a2) -> a1.getCreatedAt().isAfter(a2.getCreatedAt()) ? a1 : a2
+                ));
+                
+            jobs = jobs.stream()
+                .filter(j -> {
+                    Application latest = latestAppByJob.get(j.getId());
+                    if (latest == null) return false;
+                    return latest.getMatchScore() != null && latest.getMatchScore() >= minMatchScore;
+                })
                 .toList();
+        }
+
+        return jobs.stream().map(this::toResponse).toList();
     }
 
     private Company resolveCompany(String companyName) {

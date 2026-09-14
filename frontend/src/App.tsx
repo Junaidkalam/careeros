@@ -9,6 +9,7 @@ import Resumes from './pages/Resumes';
 import ResumeDetail from './pages/ResumeDetail';
 import Applications from './pages/Applications';
 import ApplicationDetail from './pages/ApplicationDetail';
+import Recommendations from './pages/Recommendations';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="/resumes/:id" element={<ResumeDetail />} />
             <Route path="/applications" element={<Applications />} />
             <Route path="/applications/:id" element={<ApplicationDetail />} />
+            <Route path="/recommendations" element={<Recommendations />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

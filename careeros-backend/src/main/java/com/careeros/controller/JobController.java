@@ -1,10 +1,13 @@
 package com.careeros.controller;
 
+import com.careeros.dto.JobDiscoveryResponse;
 import com.careeros.dto.JobExtractionResponse;
 import com.careeros.dto.JobImportRequest;
 import com.careeros.dto.JobRequest;
 import com.careeros.dto.JobResponse;
 import com.careeros.entity.User;
+import com.careeros.entity.enums.WorkMode;
+import com.careeros.service.JobDiscoveryService;
 import com.careeros.service.JobExtractionService;
 import com.careeros.service.JobService;
 import jakarta.validation.Valid;
@@ -16,17 +19,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Reference controller pattern: thin adapter, service does the work,
- * DTOs in/out (JPA entities never exposed directly).
- *
- * <p>Endpoints:
- * <ul>
- *   <li>{@code POST /api/jobs}        - persist a reviewed job</li>
- *   <li>{@code GET  /api/jobs}        - list the user's jobs</li>
- *   <li>{@code POST /api/jobs/import} - extract a draft from a URL (does NOT persist)</li>
- * </ul>
- */
 @RestController
 @RequestMapping("/api/jobs")
 @RequiredArgsConstructor
@@ -34,6 +26,7 @@ public class JobController {
 
     private final JobService jobService;
     private final JobExtractionService jobExtractionService;
+    private final JobDiscoveryService jobDiscoveryService;
 
     @PostMapping
     public ResponseEntity<JobResponse> createJob(
@@ -43,22 +36,33 @@ public class JobController {
     }
 
     @GetMapping
-    public ResponseEntity<List<JobResponse>> listJobs(@AuthenticationPrincipal User user) {
-        return ResponseEntity.ok(jobService.listJobs(user));
+    public ResponseEntity<List<JobResponse>> listJobs(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) WorkMode workMode,
+            @RequestParam(required = false) String employmentType,
+            @RequestParam(required = false) Integer minMatchScore) {
+        return ResponseEntity.ok(jobService.listJobs(user, search, workMode, employmentType, minMatchScore));
     }
 
-    /**
-     * Extracts job details from the given URL and returns a pre-filled draft.
-     * <strong>Nothing is persisted.</strong> The client shows the draft for the
-     * user to review/edit, then calls {@code POST /api/jobs} to actually save it.
-     *
-     * <p>Always returns HTTP 200 - extraction failures are reported in
-     * {@link JobExtractionResponse#warning()}, never as 4xx/5xx errors.
-     */
     @PostMapping("/import")
     public ResponseEntity<JobExtractionResponse> importJob(
             @AuthenticationPrincipal User user,
             @Valid @RequestBody JobImportRequest request) {
         return ResponseEntity.ok(jobExtractionService.extractFromUrl(request.url()));
+    }
+
+    /**
+     * GET /api/jobs/discover
+     *
+     * <p>Returns a ranked list of Adzuna job listings matched against the user's
+     * most-recent candidate profile. Results are review-only — nothing is saved automatically.
+     * Edge cases (no resume, no profile, credentials missing, API error) are surfaced as
+     * structured empty-state entries, never as HTTP 500.
+     */
+    @GetMapping("/discover")
+    public ResponseEntity<List<JobDiscoveryResponse>> discoverJobs(
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(jobDiscoveryService.discover(user));
     }
 }

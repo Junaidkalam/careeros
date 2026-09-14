@@ -71,4 +71,12 @@ public class ResumeController {
             @Valid @RequestBody ResumeProfileUpdateRequest request) {
         return ResponseEntity.ok(resumeService.updateProfile(user, id, request));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteResume(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id) {
+        resumeService.delete(user, id);
+        return ResponseEntity.noContent().build();
+    }
 }

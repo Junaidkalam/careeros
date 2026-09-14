@@ -33,5 +33,9 @@ app:
   ai:
     provider-api-key: ${AI_PROVIDER_API_KEY:}
 
+  adzuna:
+    app-id: ${ADZUNA_APP_ID:}
+    app-key: ${ADZUNA_APP_KEY:}
+
   storage:
     local-path: ./uploads

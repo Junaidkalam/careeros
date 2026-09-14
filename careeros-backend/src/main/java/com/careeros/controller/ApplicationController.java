@@ -36,12 +36,33 @@ public class ApplicationController {
         return ResponseEntity.ok(applicationService.list(user));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<ApplicationResponse> getApplication(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(applicationService.getApplication(user, id));
+    }
+
     @PutMapping("/{id}/status")
     public ResponseEntity<ApplicationResponse> updateStatus(
             @AuthenticationPrincipal User user,
             @PathVariable UUID id,
             @Valid @RequestBody ApplicationStatusUpdateRequest request) {
         return ResponseEntity.ok(applicationService.updateStatus(user, id, request));
+    }
+
+    @PutMapping("/{id}/follow-up")
+    public ResponseEntity<ApplicationResponse> updateFollowUpDate(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id,
+            @RequestBody com.careeros.dto.ApplicationFollowUpRequest request) {
+        return ResponseEntity.ok(applicationService.updateFollowUpDate(user, id, request));
+    }
+
+    @GetMapping("/due-followups")
+    public ResponseEntity<List<ApplicationResponse>> getDueFollowUps(
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(applicationService.getDueFollowUps(user));
     }
 
     @GetMapping("/{id}/timeline")

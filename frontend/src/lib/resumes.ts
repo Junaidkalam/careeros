@@ -79,3 +79,9 @@ export async function updateResumeProfile(id: string, payload: ResumeProfileUpda
     body: JSON.stringify(payload)
   });
 }
+
+export async function deleteResume(id: string): Promise<void> {
+  return fetchApi<void>(`/resumes/${id}`, {
+    method: 'DELETE'
+  });
+}
