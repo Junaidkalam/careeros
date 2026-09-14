@@ -16,3 +16,21 @@ frontend/*.log
 *.iml
 .DS_Store
 Thumbs.db
+frontend/test_credentials.json
+
+@"
+
+# Debug/one-off scripts — never commit these
+e2e_*.js
+e2e*.js
+test-*.cjs
+test_*.js
+query*.cjs
+debug*.js
+debug-*.png
+fix_*.py
+update_*.py
+find_*.js
+seed_backend*.cjs
+*_backup.txt
+"@ | Add-Content -Encoding utf8 .gitignore
